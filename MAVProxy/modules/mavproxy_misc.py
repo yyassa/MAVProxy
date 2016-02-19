@@ -65,6 +65,7 @@ class MiscModule(mp_module.MPModule):
         self.add_command('up', self.cmd_up, "adjust pitch trim by up to 5 degrees")
         self.add_command('reboot', self.cmd_reboot, "reboot autopilot")
         self.add_command('time', self.cmd_time, "show autopilot time")
+        self.add_command('logtime', self.cmd_logtime, "log autopilot timestamps") # @yyassa, use for time syncronisation with PC clock
         self.add_command('shell', self.cmd_shell, "run shell command")
         self.add_command('changealt', self.cmd_changealt, "change target altitude")
         self.add_command('land', self.cmd_land, "auto land")
@@ -127,11 +128,41 @@ class MiscModule(mp_module.MPModule):
 
     def cmd_time(self, args):
         '''show autopilot time'''
-        tusec = self.master.field('SYSTEM_TIME', 'time_unix_usec', 0)
+        tusec = self.master.field('SYSTEM_TIME', 'time_boot_ms', 0)
         if tusec == 0:
             print("No SYSTEM_TIME time available")
             return
-        print("%s (%s)\n" % (time.ctime(tusec * 1.0e-6), time.ctime()))
+        print("%s (%s)\n" % (tusec, time.ctime()))
+
+    def cmd_logtime(self, args):
+        '''log autopilot timestamps'''
+        unixtime_us = self.master.field('SYSTEM_TIME', 'time_unix_usec', 0)
+        boottime_ms = self.master.field('SYSTEM_TIME', 'time_boot_ms',0)
+        if unixtime_us == 0:
+            print("No SYSTEM_TIME time available")
+            return
+        # print("%s (%s)\n" % (time.ctime(tusec * 1.0e-6), time.ctime()))
+        # print("%s (%s)\n" % (time.ctime(tusec * 1.0e-6), time.ctime()))
+        filename = "timestamps_%s%s%s_%s%s%s.txt" % (time.localtime().tm_year, time.localtime().tm_mon, time.localtime().tm_mday, time.localtime().tm_hour, time.localtime().tm_min, time.localtime().tm_sec);
+        file = open(filename, "w")
+        # TODO: csv?
+
+        file.write("TIMESTAMP LOGGING FROM %s \n" % time.ctime())
+
+        file.write("FIELDS: Computer clock time | Pixhawk time (unix) | Pixhawk time (since boot) \n");
+        print("Landed_state = %s \n" % self.master.field('EXTENDED_SYS_STATE', 'landed_state',0) = 'False')
+        last_unixtime_us = 0
+        while self.master.field('EXTENDED_SYS_STATE', 'landed_state',0):
+            unixtime_us = self.master.field('SYSTEM_TIME', 'time_unix_usec', 0)
+            updated = unixtime_us != last_unixtime_us
+            if(updated):
+                print("updated = %s \n" % updated)
+                file.write("%s, %s, %s \n" % (time.ctime(), time.ctime(unixtime_us * 1.0e-6), time.ctime(boottime_ms * 1.0e-3)))
+            last_unixtime_us = unixtime_us
+        file.close()
+        print "Done logging timestamp, saved as "
+        print filename
+        print "\n"
 
     def cmd_changealt(self, args):
         '''change target altitude'''
